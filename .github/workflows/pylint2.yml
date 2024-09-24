@@ -1,0 +1,82 @@
+name: Python autotests with Allure and Selenium
+on:
+   workflow_dispatch:
+      inputs:
+         deployment_target:
+            description: Choose tests set
+            required: true
+            type: choice
+            default: smoke
+            options:
+               - smoke
+               - regression
+               - all
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    name: Run autotests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Upgrade pip
+        run: |
+          python -m pip install --upgrade pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      # Install Chrome and ChromeDriver for Selenium
+      - name: Install Chrome and ChromeDriver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          sudo apt-get install -y chromium-chromedriver
+          sudo ln -s /usr/lib/chromium-browser/chromedriver /usr/local/bin/chromedriver
+      - name: Set up display (Xvfb) for headless browser
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -ac &
+          export DISPLAY=:99
+      # Conditional test execution with Selenium support
+      - name: Run all tests
+        if: "github.event.inputs.deployment_target == 'all'"
+        run: |
+          pytest --alluredir=allure-results
+        continue-on-error: true
+      - name: Run smoke tests
+        if: "github.event.inputs.deployment_target == 'smoke'"
+        run: |
+          pytest -m smoke --alluredir=allure-results
+        continue-on-error: true
+      - name: Run regression tests
+        if: "github.event.inputs.deployment_target == 'regression'"
+        run: |
+          pytest -m regression --alluredir=allure-results
+        continue-on-error: true
+      # Install Java for Allure
+      - name: Install Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      # Install Allure for generating test reports
+      - name: Install Allure
+        run: |
+          mkdir -p $HOME/allure
+          curl -sL https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz -o allure-2.30.0.tgz
+          tar -zxvf allure-2.30.0.tgz -C $HOME/allure
+          echo "ALLURE_HOME=$HOME/allure/allure-2.30.0" >> $GITHUB_ENV
+          echo "$HOME/allure/allure-2.30.0/bin" >> $GITHUB_PATH
+      # Generate and upload Allure report
+      - name: Generate Allure report
+        run: |
+          allure generate -c allure-results -o allure-report
+      - name: Upload Allure report
+        uses: actions/upload-artifact@v3
+        with:
+          name: allure-report
+          path: allure-report
+          retention-days: 1
