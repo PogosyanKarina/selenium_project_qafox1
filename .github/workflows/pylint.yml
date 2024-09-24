@@ -1,0 +1,41 @@
+name: Python autotests
+
+on: 
+   workflow_dispatch:
+      inputs:
+         deployment_target:
+            description: choose tests set
+            required: true
+            type: choice
+            default: smoke
+            options:
+               - smoke
+               - regression
+               - all
+   
+jobs:
+  run-tests:
+    runs-on: windows-latest
+    name: Run autotests
+    steps:
+      - name: Run autotests
+        uses: actions/checkout@v4
+      - name: Set up Python evironment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pip Upgrade
+        run:
+          python -m pip install --upgrade pip
+      - name: Install dependencies
+        run:  
+          pip install -r requirements.txt
+      - name: run all tests
+        if: "github.event.inputs.deployment_target == 'all'"  
+        run: pytest
+      - name: run smoke tests
+        if: "github.event.inputs.deployment_target == 'smoke'"  
+        run: pytest -m smoke
+      - name: run regression tests
+        if: "github.event.inputs.deployment_target == 'regression'"  
+        run: pytest -m regression
